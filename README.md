@@ -2,7 +2,7 @@
 
 Agniva 2.0 is an advanced real-time Fire and Smoke detection system integrating a high-performance **Flask backend** (featuring YOLOv8 AI detection) and a premium, responsive **Vite + React frontend** styled with smooth CSS glassmorphism, animations, and clean layouts.
 
---
+-
 
 ## ⚡ Quick Start (Local Run)
 
