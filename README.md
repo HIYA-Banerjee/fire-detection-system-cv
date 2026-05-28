@@ -24,7 +24,7 @@ For Windows users, we have provided a single batch script to automate the depend
 - **Username:** `admin` | **Password:** `admin123`
 - **Username:** `user` | **Password:** `user123`
 
----
+--
 
 ## 🚀 Deploying to Vercel
 
