@@ -7,10 +7,10 @@ from server import app, init_detector
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("🔥 FIRE & SMOKE DETECTION SYSTEM - STARTUP 🔥")
+    print("  FIRE & SMOKE DETECTION SYSTEM - STARTUP  ")
     print("="*60)
-    print("\n✅ Application starting...")
-    print("🌐 Open your browser: http://localhost:5000")
+    print("\n[OK] Application starting...")
+    print("Open your browser: http://localhost:5000")
     print("🔐 Login with: admin / admin123")
     print("\nPress Ctrl+C to stop the server\n")
     

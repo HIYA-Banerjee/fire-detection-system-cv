@@ -30,6 +30,13 @@ class FireSmokeDetector:
             
         # Try to load YOLOv8
         try:
+            import torch
+            try:
+                from ultralytics.nn.tasks import DetectionModel
+                if hasattr(torch.serialization, 'add_safe_globals'):
+                    torch.serialization.add_safe_globals([DetectionModel])
+            except Exception:
+                pass
             from ultralytics import YOLO
             self.model = YOLO(model_path)
             self.using_yolo = True

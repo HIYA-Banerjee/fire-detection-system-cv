@@ -604,25 +604,25 @@ def server_error(e):
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🔥 AI FIRE & SMOKE DETECTION SYSTEM 🔥")
+    print("   AI FIRE & SMOKE DETECTION SYSTEM   ")
     print("=" * 60)
     print("Features:")
-    print("  • Real-time YOLOv8 detection")
-    print("  • Google OAuth authentication")
-    print("  • Live video streaming")
-    print("  • Alert system with notifications")
+    print("  * Real-time YOLOv8 detection")
+    print("  * Google OAuth authentication")
+    print("  * Live video streaming")
+    print("  * Alert system with notifications")
     print("=" * 60)
     
     # Initialize detector
     init_detector()
     
     # Print access info
-    print("\n🌐 Access URLs:")
+    print("\nAccess URLs:")
     print("  Local:   http://localhost:5000")
     print("  Network: http://0.0.0.0:5000")
     
     if not GOOGLE_CLIENT_ID:
-        print("\n⚠️  WARNING: GOOGLE_CLIENT_ID not set!")
+        print("\nWARNING: GOOGLE_CLIENT_ID not set!")
         print("   Set DEV_MODE=true to enable development mode")
         print("   Or add GOOGLE_CLIENT_ID to .env file")
     
