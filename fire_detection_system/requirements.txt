@@ -10,6 +10,7 @@ torchvision>=0.15.0
 # Web Framework
 flask>=2.3.0
 flask-login>=0.6.0
+flask-cors>=3.0.10
 
 # Authentication
 google-auth>=2.22.0

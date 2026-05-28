@@ -1,106 +1,78 @@
-# 🚀 Agniva 2.0 - Vercel Deployment Guide
+# 🚀 Agniva 2.0 - Deployment Guide
 
-This guide provides a detailed, step-by-step tutorial on how to deploy the integrated React frontend and Flask Python backend to Vercel as a single unified project.
-
----
-
-## 🏗️ Deployment Architecture
-
-Agniva 2.0 uses Vercel's multi-runtime capability:
-1. **Frontend**: Vite + React SPA (Single Page Application) is compiled to static files and served globally by the Vercel Edge Network.
-2. **Backend**: Flask API is bundled into a Serverless Python Function. Requests targeting `/api/*` are automatically redirected to `api/index.py`.
-3. **Hardware / Model Fallback**: Since AWS Lambda (which powers Vercel Serverless) has no access to physical webcams and imposes a 50MB (zipped) / 250MB (unzipped) package limit:
-   - Deep-learning packages (`torch`, `torchvision`, `ultralytics`) are omitted from Vercel's dependencies.
-   - The backend automatically detects the serverless deployment and launches **Simulated Camera Mode**, feeding a synthetic camera video stream with simulated fire/smoke boxes and populating the dashboard's live metrics and alert logs.
-
-> [!IMPORTANT]
-**Vercel Lambda Bundle Limit (Resolved)**
-- Vercel Serverless Functions have a maximum size limit of 250MB unzipped. To ensure the deployment is under this limit, the root folder contains a `.vercelignore` file that ignores the React `node_modules/`, compiler build artifacts (`dist/`), temporary folders, local run scripts, and the local YOLO model weights (`yolov8n.pt`).
-- This keeps the Vercel deploy package size at less than 1MB, ensuring it deploys instantly and without bundle size errors.
+This guide details how to deploy Agniva 2.0. We support two deployment models:
+1. **Render (Backend) + Vercel (Frontend) [RECOMMENDED]**: Runs a persistent Flask server on Render supporting physical/simulated webcam streaming and full YOLOv8 detection, while serving the React client instantly from Vercel's global CDN.
+2. **Unified Vercel (Serverless)**: Deploys both frontend and backend to Vercel. Since serverless functions time out after 10-60 seconds, this mode cannot stream continuous video feeds and is only useful for basic API testing.
 
 ---
 
-## 📋 Prerequisites
+## 🏗️ Method 1: Render (Backend) + Vercel (Frontend) [Recommended]
 
-Before deploying, ensure you have:
-1. A **GitHub** account.
-2. A **Vercel** account (you can sign in with your GitHub account).
-3. Pushed your latest code to your GitHub repository: `https://github.com/HIYA-Banerjee/Agniva2.0.git`.
+This setup ensures that the live video streaming endpoint `/api/live_detection` does not time out and operates with full YOLOv8 detection.
 
----
+### A. Deploy Backend to Render
 
-## 🛠️ Step-by-Step Deployment (Web Dashboard)
+1. Log in to [Render](https://render.com).
+2. Click **New +** ➔ **Web Service**.
+3. Link your GitHub repository (`Agniva2.0`).
+4. Configure the Web Service:
+   - **Name**: `agniva-backend`
+   - **Runtime**: `Python`
+   - **Build Command**: `pip install -r fire_detection_system/requirements.txt`
+   - **Start Command**: `python fire_detection_system/server.py`
+5. Configure Environment Variables in the **Variables** tab:
+   - `DEV_MODE`: `true` (enables local developer mode bypass without Google credentials).
+   - `ALLOWED_ORIGINS`: `https://your-frontend-domain.vercel.app` (your Vercel project domain URL, once deployed).
+6. Click **Deploy Web Service**.
 
-This is the recommended method as it sets up automatic continuous deployment (CI/CD) whenever you push changes to your GitHub branch.
+### B. Deploy Frontend to Vercel
 
-### Step 1: Import the Repository
 1. Log in to the [Vercel Dashboard](https://vercel.com).
 2. Click **Add New** ➔ **Project**.
-3. Locate `Agniva2.0` in your list of GitHub repositories and click **Import**.
+3. Import the `Agniva2.0` repository.
+4. Configure Project Settings:
+   - **Framework Preset**: **Other**
+   - **Root Directory**: `agniv-2.0/frontend` (Or keep as root `./` and adjust the compiler paths below)
+     *If root directory is `./`:*
+     - **Build Command**: `npm run build`
+     - **Output Directory**: `agniv-2.0/frontend/dist`
+5. Configure Environment Variables:
+   - `VITE_API_URL`: `https://your-backend-domain.onrender.com/api` (the URL Render generated for your backend service).
+6. Click **Deploy**.
+
+---
+
+## 🏗️ Method 2: Unified Vercel (Serverless Fallback)
+
+This model compiles the React client and the Flask backend into a single serverless Vercel deployment. 
+
+> [!CAUTION]
+> Because Vercel Serverless Functions have a strict execution time limit (e.g. 10 seconds), accessing `/api/live_detection` will time out and result in a black box or a `504 Gateway Timeout` error.
+
+### Step 1: Import the Repository
+1. Log in to [Vercel](https://vercel.com).
+2. Import the `Agniva2.0` repository.
 
 ### Step 2: Configure Project Settings
-In the configuration screen, adjust the parameters:
+1. **Framework Preset**: **Other**
+2. **Root Directory**: `./` (default workspace root).
+3. **Build Settings**:
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `agniv-2.0/frontend/dist`
 
-1. **Framework Preset**: Select **Other** (do not select Vite, since we are deploying a custom layout).
-2. **Root Directory**: Keep it as `./` (the default workspace root).
-3. **Build and Development Settings**:
-   - Expand the dropdown.
-   - **Build Command**: Set to `npm run build`
-   - **Output Directory**: Set to `agniv-2.0/frontend/dist`
-   - **Install Command**: Keep as default.
+### Step 3: Configure Environment Variables
+- `DEV_MODE`: `true`
 
-### Step 3: Configure Environment Variables (Optional)
-If you wish to use custom keys, expand the **Environment Variables** section and add:
-- `FLASK_SECRET_KEY`: A secure random string for signing cookies.
-- `DEV_MODE`: Set to `true` (enables local developer mode bypass without Google credentials).
-- `GOOGLE_CLIENT_ID`: (Optional) Your Google OAuth Client ID if you wish to run Google sign-in.
-
-### Step 4: Click Deploy!
-- Click the **Deploy** button.
-- Vercel will install Node.js modules, run the Vite React compiler, bundle the Python Serverless Function using the dependencies in [requirements.txt](file:///d:/ex%20projects/Agniva2.0/requirements.txt), and generate your production URL.
+### Step 4: Deploy
+- Click **Deploy**.
 
 ---
 
-## 💻 Alternative: Deploying via Vercel CLI
+## 🛠️ Local Development
 
-If you want to deploy directly from your local terminal:
+To run the application locally on your computer (where physical webcams are accessible):
 
-1. **Install Vercel CLI**:
-   ```bash
-   npm install -g vercel
-   ```
-2. **Login to Vercel**:
-   ```bash
-   vercel login
-   ```
-3. **Initialize Deployment**:
-   Run the following command at the root of the project:
-   ```bash
-   vercel
-   ```
-   - Answer the prompts:
-     - Set up and deploy? **Yes**
-     - Which scope? (Select your account)
-     - Link to existing project? **No**
-     - What name? `agniva2`
-     - Which directory is code located in? `./`
-     - Modify settings? **Yes**
-     - Modify Build Command? **Yes** ➔ `npm run build`
-     - Modify Output Directory? **Yes** ➔ `agniv-2.0/frontend/dist`
-4. **Deploy to Production**:
-   ```bash
-   vercel --prod
-   ```
-
----
-
-## 🔍 Verifying the Deployment
-
-Once Vercel gives you your deployment URL (e.g. `https://agniva2.vercel.app`), verify the setup:
-
-1. Visit the URL to see the premium landing page.
-2. Navigate to `/login` and type any email/password (with `DEV_MODE=true` set, it bypasses validations).
-3. Access your **Protected Properties** dashboard.
-4. Click **Camera Management** on a property and select **Use Backend Camera**.
-   - Since it's running on Vercel, the backend will seamlessly activate the **Simulated Camera Feed** and show periodic fire/smoke bounding boxes.
-   - Real-time alerts will trigger and populate the logs, validating that the API endpoints and the front-end components are fully integrated!
+1. Double-click the `start.bat` file in the root folder.
+2. The script will:
+   - Open a backend console running Flask at `http://localhost:5000`.
+   - Start the Vite dev server at `http://localhost:5173`.

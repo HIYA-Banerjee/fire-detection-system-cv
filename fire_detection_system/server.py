@@ -25,6 +25,8 @@ from functools import wraps
 # Load environment variables
 load_dotenv()
 
+from flask_cors import CORS
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(
     __name__,
@@ -32,6 +34,20 @@ app = Flask(
     static_folder=os.path.join(BASE_DIR, 'static')
 )
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'fire-detection-secret-key-change-in-production')
+
+# Enable CORS for frontend integration
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174"
+]
+env_origins = os.getenv('ALLOWED_ORIGINS')
+if env_origins:
+    allowed_origins.extend([o.strip() for o in env_origins.split(',') if o.strip()])
+
+CORS(app, supports_credentials=True, origins=allowed_origins, expose_headers=["Content-Type", "Authorization"])
+print(f"[CORS] Enabled with allowed origins: {allowed_origins}")
 
 
 # Configuration
