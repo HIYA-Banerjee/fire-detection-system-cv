@@ -1,0 +1,35 @@
+# Ignore node_modules
+node_modules/
+**/node_modules/
+
+# Ignore local build outputs
+dist/
+**/dist/
+build/
+**/build/
+
+# Ignore Python caches and weights
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+fire_detection_system/yolov8n.pt
+
+# Ignore Git
+.git/
+.github/
+
+# Ignore local environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore local run scripts
+start.bat
+walkthrough.md
+task.md
+implementation_plan.md
+deployment.md
