@@ -31,12 +31,15 @@ class FireSmokeDetector:
         # Try to load YOLOv8
         try:
             import torch
-            try:
-                from ultralytics.nn.tasks import DetectionModel
-                if hasattr(torch.serialization, 'add_safe_globals'):
-                    torch.serialization.add_safe_globals([DetectionModel])
-            except Exception:
-                pass
+            # Monkey-patch torch.load to disable default weights_only in PyTorch 2.6+
+            if hasattr(torch, 'load'):
+                _orig_load = torch.load
+                def _patched_load(*args, **kwargs):
+                    if 'weights_only' not in kwargs:
+                        kwargs['weights_only'] = False
+                    return _orig_load(*args, **kwargs)
+                torch.load = _patched_load
+
             from ultralytics import YOLO
             self.model = YOLO(model_path)
             self.using_yolo = True

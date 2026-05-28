@@ -145,7 +145,7 @@ def login_required(f):
 
 def generate_video_stream():
     """Generate MJPEG stream for live video"""
-    global is_detecting, fps_counter, fps_start_time, current_fps, last_detection_result
+    global is_detecting, fps_counter, fps_start_time, current_fps, last_detection_result, is_mock_camera, camera
     
     frame_count = 0
     local_fps_time = time.time()
@@ -207,6 +207,13 @@ def generate_video_stream():
                 
             ret, frame = camera.read()
             if not ret:
+                print("[WARN] Camera read failed. Releasing camera and falling back to simulated feed.")
+                is_mock_camera = True
+                try:
+                    camera.release()
+                except Exception:
+                    pass
+                camera = None
                 continue
             
             # Mirror flip
@@ -478,8 +485,15 @@ def start_detection():
 @login_required
 def stop_detection():
     """Stop live detection"""
-    global is_detecting
+    global is_detecting, camera
     is_detecting = False
+    if camera is not None:
+        try:
+            camera.release()
+            print("[OK] Camera released")
+        except Exception as e:
+            print(f"[WARN] Error releasing camera: {e}")
+        camera = None
     print("[OK] Detection stopped")
     return jsonify({"message": "Detection stopped", "status": "stopped"})
 
