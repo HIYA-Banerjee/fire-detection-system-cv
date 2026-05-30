@@ -1,525 +1,377 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  detectImage, 
-  detectFrame, 
-  startDetection, 
-  stopDetection, 
-  getStatus, 
-  getAlerts, 
-  clearAlerts,
-  getProperties 
-} from '../services/api';
-import createSocket from '../services/socket';
-import { 
-  Camera, 
-  Upload, 
-  Play, 
-  Square, 
-  AlertOctagon, 
-  RefreshCw, 
-  ArrowLeft,
-  Activity,
-  CheckCircle,
-  FileImage,
-  Clock
-} from 'lucide-react';
+import { detectFrame, startDetection, stopDetection, getAlerts, clearAlerts } from '../services/api';
+import { io } from 'socket.io-client';
+import '../styles/CameraManagement.css';
 
 export default function CameraManagement() {
   const { propertyId } = useParams();
   const navigate = useNavigate();
-  
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const intervalRef = useRef(null);
   const socketRef = useRef(null);
 
-  // States
-  const [property, setProperty] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [alertActive, setAlertActive] = useState(false);
+  const [annotatedFrame, setAnnotatedFrame] = useState(null);
   const [detections, setDetections] = useState([]);
-  const [annotatedImage, setAnnotatedImage] = useState(null);
+  const [alertActive, setAlertActive] = useState(false);
+  const [alerts, setAlerts] = useState([]);
   const [error, setError] = useState('');
-  const [mode, setMode] = useState('upload'); // 'upload' | 'webcam'
-  const [webcamStream, setWebcamStream] = useState(null);
-  const [alertsHistory, setAlertsHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [fps, setFps] = useState(0);
+  const [streamReady, setStreamReady] = useState(false);
+  const [gpsBind, setGpsBind] = useState('Querying...');
 
-  // Load property details and alerts history
-  const initPage = async () => {
-    try {
-      const props = await getProperties();
-      const match = props.find(p => p.id === propertyId);
-      if (match) {
-        setProperty(match);
-      } else {
-        setError('Property not found.');
-      }
-    } catch (err) {
-      setError('Failed to fetch property details.');
-      console.error(err);
-    }
-
-    try {
-      const data = await getAlerts(15);
-      setAlertsHistory(data.alerts || []);
-    } catch (err) {
-      console.error('Failed to load alert history', err);
-    }
-  };
-
+  // Setup socket connection and load initial alerts
   useEffect(() => {
-    initPage();
+    // Load existing alerts log
+    getAlerts(20)
+      .then((data) => {
+        setAlerts(data || []);
+      })
+      .catch((err) => console.error('Failed to pre-load alerts log', err));
 
-    // Setup Socket
-    socketRef.current = createSocket();
-    
+    // Get GPS coordinates
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setGpsBind(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        },
+        () => {
+          setGpsBind('Unavailable (Permission Denied)');
+        }
+      );
+    } else {
+      setGpsBind('Unavailable');
+    }
+
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://fire-detection-backend-c1xy.onrender.com';
+    socketRef.current = io(SOCKET_URL, { 
+      withCredentials: true, 
+      transports: ['websocket', 'polling'] 
+    });
+
     socketRef.current.on('connect', () => {
-      console.log('Socket.IO connection established for properties');
+      console.log('Socket.IO monitoring connection open');
     });
 
     socketRef.current.on('alert', (data) => {
-      // Trigger alarm state if matches current property or if general broadcast
       setAlertActive(true);
-      if (data.detections) {
-        setDetections(data.detections);
-      }
-      // Reload history
-      getAlerts(15).then(res => setAlertsHistory(res.alerts || [])).catch(console.error);
+      setAlerts((prev) => [data, ...prev].slice(0, 20));
+    });
+
+    socketRef.current.on('alerts_cleared', () => {
+      setAlertActive(false);
+      setAlerts([]);
     });
 
     // Cleanup on unmount
     return () => {
-      stopDetectionLoop();
+      clearInterval(intervalRef.current);
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+        videoRef.current.srcObject = null;
+      }
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
     };
-  }, [propertyId]);
+  }, []);
 
-  // Mode 1: Image Upload
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setLoading(true);
+  async function handleStart() {
     setError('');
-    setAnnotatedImage(null);
-    setDetections([]);
-    
     try {
-      const res = await detectImage(file);
-      if (res.success) {
-        setAnnotatedImage(res.annotated_image);
-        setDetections(res.detections || []);
-        setAlertActive(res.alert);
-        // Refresh alert history
-        const updatedAlerts = await getAlerts(15);
-        setAlertsHistory(updatedAlerts.alerts || []);
-      } else {
-        setError('Image detection failed.');
-      }
-    } catch (err) {
-      console.error(err);
-      setError(err?.response?.data?.error || 'Detection failed. Server connection error.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Mode 2: Live Webcam Detection
-  const startLiveWebcam = async () => {
-    setError('');
-    setAnnotatedImage(null);
-    setDetections([]);
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480 }
+      // 1. Get webcam
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 }, 
+          facingMode: 'environment' 
+        }, 
+        audio: false 
       });
       
-      setWebcamStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-
-      // Call start detection endpoint
+      // 2. Attach to video element - THIS IS CRITICAL
+      const video = videoRef.current;
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play();
+        setStreamReady(true);
+      };
+      
+      // 3. Tell backend detection is starting
       await startDetection();
       setIsRunning(true);
 
-      // Frame capture loop every 500ms
-      intervalRef.current = setInterval(captureAndDetectFrame, 500);
+      // 4. Start frame capture loop — wait 1 second for video to be ready
+      setTimeout(() => {
+        let frameCount = 0;
+        let lastFpsTime = Date.now();
+        
+        intervalRef.current = setInterval(async () => {
+          const vid = videoRef.current;
+          const canvas = canvasRef.current;
+          if (!vid || !canvas || vid.readyState < 2 || vid.videoWidth === 0) return;
+          
+          // Draw frame to canvas
+          canvas.width = vid.videoWidth;
+          canvas.height = vid.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+          
+          // Get base64 frame
+          const frameData = canvas.toDataURL('image/jpeg', 0.7);
+          
+          try {
+            const result = await detectFrame(frameData);
+            if (result.annotated_image) {
+              setAnnotatedFrame(result.annotated_image);
+            }
+            setDetections(result.detections || []);
+            if (result.alert) {
+              setAlertActive(true);
+            }
+            
+            // FPS counter
+            frameCount++;
+            const now = Date.now();
+            if (now - lastFpsTime >= 1000) {
+              setFps(frameCount);
+              frameCount = 0;
+              lastFpsTime = now;
+            }
+          } catch (err) {
+            console.error('Frame detection error:', err);
+          }
+        }, 500); // every 500ms = ~2fps detection
+      }, 1000);
+      
     } catch (err) {
-      console.error(err);
-      setError('Could not access webcam. Ensure permissions are granted.');
-    }
-  };
-
-  const captureAndDetectFrame = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      const base64 = canvas.toDataURL('image/jpeg', 0.7);
-      
-      try {
-        const res = await detectFrame(base64);
-        if (res.success) {
-          setAnnotatedImage(res.annotated_image);
-          setDetections(res.detections || []);
-          setAlertActive(res.alert);
-        }
-      } catch (err) {
-        console.error('Frame processing failed', err);
+      if (err.name === 'NotAllowedError') {
+        setError('Camera permission denied. Please allow camera access and try again.');
+      } else {
+        setError('Failed to start camera: ' + err.message);
       }
     }
-  };
+  }
 
-  const stopDetectionLoop = async () => {
-    // Clear capture interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    // Stop webcam media tracks
-    if (webcamStream) {
-      webcamStream.getTracks().forEach(track => track.stop());
-      setWebcamStream(null);
-    }
-    
-    if (videoRef.current) {
+  function handleStop() {
+    clearInterval(intervalRef.current);
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
       videoRef.current.srcObject = null;
     }
-
-    // Call stop detection on backend
-    try {
-      await stopDetection();
-    } catch (e) {
-      console.warn('Backend stop detection failed', e);
-    }
-
+    stopDetection();
     setIsRunning(false);
-  };
+    setStreamReady(false);
+    setAnnotatedFrame(null);
+    setDetections([]);
+    setFps(0);
+  }
 
-  const handleClearActiveAlert = async () => {
+  const handleClearAlerts = async () => {
     try {
       await clearAlerts();
       setAlertActive(false);
-      setDetections([]);
-      // Reload history
-      const updatedAlerts = await getAlerts(15);
-      setAlertsHistory(updatedAlerts.alerts || []);
+      setAlerts([]);
     } catch (err) {
-      console.error('Failed to clear alert', err);
+      console.error('Failed to clear alerts log', err);
     }
   };
 
   return (
-    <div className="page-wrapper min-h-screen text-[#e0e0e0] flex flex-col gap-6">
+    <div className="camera-page text-[#e0e0e0] max-w-7xl mx-auto flex flex-col gap-6">
       
-      {/* Header */}
-      <header className="glass-card p-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => { stopDetectionLoop(); navigate('/dashboard'); }}
-            className="btn-ghost p-2 border-none hover:bg-white/5"
-            style={{ padding: '6px 12px' }}
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              Camera Monitoring Node
-            </h1>
-            <p className="text-xs text-[#888]">
-              Property: <span className="text-white font-medium">{property?.name || 'Loading...'}</span> | {property?.address}
-            </p>
-          </div>
-        </div>
+      {/* Back Header */}
+      <div className="flex justify-between items-center mb-2">
+        <button 
+          onClick={() => { handleStop(); navigate('/dashboard'); }}
+          className="btn-ghost"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px' }}
+        >
+          ← Back to Dashboard
+        </button>
+        <h1 className="text-xl font-bold text-white">Monitoring Node: {propertyId}</h1>
+      </div>
 
-        {/* Mode Selector */}
-        <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
-          <button
-            onClick={() => { stopDetectionLoop(); setMode('upload'); }}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
-              mode === 'upload' ? 'bg-fire-500 text-white shadow' : 'text-[#888] hover:text-white'
-            }`}
-          >
-            Image Upload
-          </button>
-          <button
-            onClick={() => { stopDetectionLoop(); setMode('webcam'); }}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
-              mode === 'webcam' ? 'bg-fire-500 text-white shadow' : 'text-[#888] hover:text-white'
-            }`}
-          >
-            Live Webcam
-          </button>
+      {error && (
+        <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '12px 16px', borderRadius: '8px', marginBottom: '1rem' }}>
+          {error}
         </div>
-      </header>
+      )}
 
-      {/* Pulsing Active Alert Banner Overlay */}
       {alertActive && (
-        <div className="alert-banner p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl animate-bounce">🔥</span>
+        <div className="alert-banner animate-pulse" style={{ backgroundColor: 'rgba(239,68,68,0.15)', border: '2px solid #ef4444', borderRadius: '12px', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '2rem' }}>🔥</span>
             <div>
-              <h3 className="text-lg font-bold text-red-500">FIRE / SMOKE DETECTED</h3>
-              <p className="text-xs text-gray-300">
-                Current active detections: {detections.map(d => `${d.label} (${(d.confidence * 100).toFixed(0)}%)`).join(', ') || 'No detailed stats available.'}
-              </p>
+              <h3 style={{ margin: 0, color: '#ef4444', fontWeight: 'bold', fontSize: '1.15rem' }}>FIRE/SMOKE DETECTED</h3>
+              <p style={{ margin: '4px 0 0 0', color: '#e0e0e0', fontSize: '0.9rem' }}>Dispatch emergency response teams immediately!</p>
             </div>
           </div>
-          <button
-            onClick={handleClearActiveAlert}
-            className="btn-primary bg-red-600 hover:bg-red-700 text-xs font-bold py-1.5 px-4 rounded"
+          <button 
+            className="btn-stop" 
+            onClick={handleClearAlerts}
+            style={{ padding: '8px 20px', fontSize: '0.85rem' }}
           >
             Clear Alert
           </button>
         </div>
       )}
 
-      {error && (
-        <div className="p-4 bg-red-500/15 border border-red-500/30 text-red-500 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Main Two-Column Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="camera-layout">
         
-        {/* Left Column - Video/Image Feed */}
-        <div className="lg:col-span-8 flex flex-col gap-4">
-          <div className="glass-card overflow-hidden aspect-video bg-[#05050a] flex items-center justify-center relative border border-white/5">
+        {/* LEFT COLUMN: video panel */}
+        <div className="video-panel flex flex-col gap-4">
+          <div className="video-wrapper">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="video-feed"
+              style={{ display: annotatedFrame ? 'none' : 'block' }}
+            />
             
-            {mode === 'upload' ? (
-              // Image Upload Mode View
-              annotatedImage ? (
-                <img 
-                  src={annotatedImage} 
-                  alt="AI Detection Feed" 
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <div className="text-center p-8 flex flex-col items-center gap-3">
-                  <FileImage className="w-16 h-16 text-[#444] animate-pulse" />
-                  <p className="text-sm text-[#888]">No image analyzed yet</p>
-                  <label className="btn-ghost text-xs cursor-pointer py-2 px-4">
-                    <Upload size={14} className="inline mr-1" />
-                    Browse Image
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleImageUpload}
-                    />
-                  </label>
-                </div>
-              )
-            ) : (
-              // Live Webcam Mode View
-              <div className="relative w-full h-full">
-                {/* Hidden canvas for capturing video frames */}
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
-                
-                {/* Hidden source video element */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-full object-cover ${isRunning ? 'opacity-0 absolute' : 'opacity-100'}`}
-                />
-
-                {/* Display processed frame overlay */}
-                {isRunning && annotatedImage ? (
-                  <img 
-                    src={annotatedImage} 
-                    alt="Live AI Stream" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  !isRunning && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40">
-                      <Camera className="w-16 h-16 text-[#444]" />
-                      <p className="text-sm text-[#888]">Webcam monitoring offline</p>
-                      <button
-                        onClick={startLiveWebcam}
-                        className="btn-primary text-xs py-2 px-4"
-                      >
-                        <Play size={14} className="inline mr-1" />
-                        Start Live Detection
-                      </button>
-                    </div>
-                  )
-                )}
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            
+            {annotatedFrame && (
+              <img 
+                src={annotatedFrame} 
+                alt="AI Detection" 
+                className="video-feed annotated"
+              />
+            )}
+            
+            {!isRunning && (
+              <div className="video-placeholder">
+                <span style={{fontSize:'48px'}}>📷</span>
+                <p style={{ margin: 0, fontWeight: 500 }}>Click "Start Detection" to begin</p>
               </div>
             )}
-
-            {/* Spinner Overlay */}
-            {loading && (
-              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                  <RefreshCw className="animate-spin text-fire-500 w-8 h-8" />
-                  <span className="text-xs text-gray-300">Processing with YOLOv8...</span>
-                </div>
-              </div>
+            
+            {isRunning && (
+              <div className="fps-badge">{fps} FPS</div>
             )}
           </div>
-
-          {/* Controls Bar */}
-          <div className="glass-card p-4 flex justify-between items-center gap-4 border border-white/5">
+          
+          <div className="controls-bar">
             <div>
-              <span className="text-xs text-[#888] font-medium block">Active Mode</span>
-              <span className="text-sm font-semibold text-white">
-                {mode === 'upload' ? 'Upload Footage Analysis' : 'Webcam Live Stream'}
-              </span>
+              <span className="mode-label" style={{ fontSize: '12px', color: '#888', display: 'block' }}>Active Mode</span>
+              <span className="mode-value" style={{ fontSize: '14px', fontWeight: '600', color: '#fff' }}>Webcam Live Stream</span>
             </div>
-
-            <div className="flex gap-2">
-              {mode === 'upload' ? (
-                <label className="btn-primary bg-fire-500 hover:bg-fire-600 cursor-pointer text-xs font-bold py-2 px-5">
-                  <Upload size={14} className="inline mr-1" />
-                  Upload Image
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleImageUpload} 
-                  />
-                </label>
-              ) : (
-                isRunning ? (
-                  <button
-                    onClick={stopDetectionLoop}
-                    className="btn-primary bg-red-600 hover:bg-red-700 text-xs font-bold py-2 px-5"
-                  >
-                    <Square size={14} className="inline mr-1" />
-                    Stop Detection
-                  </button>
-                ) : (
-                  <button
-                    onClick={startLiveWebcam}
-                    className="btn-primary bg-fire-500 hover:bg-fire-600 text-xs font-bold py-2 px-5"
-                  >
-                    <Play size={14} className="inline mr-1" />
-                    Start Live Detection
-                  </button>
-                )
-              )}
-            </div>
+            {!isRunning ? (
+              <button className="btn-start" onClick={handleStart}>🔴 Start Detection</button>
+            ) : (
+              <button className="btn-stop" onClick={handleStop}>⏹ Stop Detection</button>
+            )}
           </div>
         </div>
 
-        {/* Right Column - Detections & Diagnostics */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
+        {/* RIGHT COLUMN: diagnostics panel */}
+        <div className="detections-panel flex flex-col gap-6">
           
-          {/* Active AI Detections Card */}
-          <div className="glass-card p-6 flex flex-col gap-4 border border-white/5">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Activity className="text-fire-500 w-5 h-5" />
-              Live AI Diagnostics
-            </h3>
-
-            {detections.length === 0 ? (
-              <div className="text-center py-8 text-xs text-[#888] flex flex-col items-center gap-2">
-                <CheckCircle className="text-green-500 w-8 h-8 opacity-45" />
-                No fire or smoke signatures detected.
+          {/* Panel 1: Live AI Diagnostics */}
+          <div className="diagnostics-box" style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', fontWeight: '700', color: '#fff' }}>Live AI Diagnostics</h3>
+            
+            {detections.length === 0 && !alertActive ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#22c55e', fontSize: '14px' }}>
+                <span>✓</span>
+                <span>No fire or smoke signatures detected.</span>
               </div>
             ) : (
-              <div className="flex flex-col gap-2.5">
-                {detections.map((det, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`p-3 rounded-lg border flex items-center justify-between ${
-                      det.label.toLowerCase() === 'fire' 
-                        ? 'bg-red-500/10 border-red-500/20 text-red-400' 
-                        : 'bg-gray-500/10 border-gray-500/20 text-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">🔥</span>
-                      <span className="font-bold text-sm uppercase">{det.label}</span>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '14px', marginBottom: '16px', fontWeight: 'bold' }}>
+                  <span>⚠</span>
+                  <span>ALERT: Detection active!</span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {detections.map((det, idx) => (
+                    <div key={idx}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                        <span className={det.label.toLowerCase() === 'fire' ? 'text-red-500' : 'text-gray-300'}>
+                          {det.label.toUpperCase()}
+                        </span>
+                        <span>{(det.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="confidence-bar-bg">
+                        <div 
+                          className="confidence-bar-fill" 
+                          style={{ 
+                            width: `${(det.confidence * 100).toFixed(0)}%`,
+                            backgroundColor: det.label.toLowerCase() === 'fire' ? '#ff4500' : '#888'
+                          }}
+                        />
+                      </div>
                     </div>
-                    <span className="font-mono text-sm font-semibold">
-                      {(det.confidence * 100).toFixed(1)}% Conf.
-                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Panel 2: NODE STATUS */}
+          <div className="status-box" style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', fontWeight: '700', color: '#fff' }}>Node Status</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                <span style={{ color: '#888' }}>Connection</span>
+                <span style={{ fontWeight: '600', color: socketRef.current?.connected ? '#22c55e' : '#ef4444' }}>
+                  {socketRef.current?.connected ? 'WebSocket Active' : 'Disconnected'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                <span style={{ color: '#888' }}>Detection</span>
+                <span style={{ fontWeight: '600', color: isRunning ? '#22c55e' : '#888' }}>
+                  {isRunning ? 'Running' : 'Idle'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                <span style={{ color: '#888' }}>FPS</span>
+                <span style={{ fontWeight: '600', color: '#fff' }}>{fps} fps</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#888' }}>GPS Bind</span>
+                <span style={{ fontWeight: '600', color: '#fff' }}>{gpsBind}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Panel 3: Recent Alerts */}
+          <div className="alerts-history-box" style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '1.1rem', fontWeight: '700', color: '#fff' }}>Recent Alerts (Last 5)</h3>
+            
+            {alerts.length === 0 ? (
+              <div style={{ color: '#888', fontSize: '12px', textAlign: 'center', padding: '12px' }}>
+                No alerts recorded
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {alerts.slice(0, 5).map((item, idx) => (
+                  <div key={idx} style={{ borderBottom: idx === 4 ? 'none' : '1px solid rgba(255,255,255,0.05)', padding: '8px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: '#888' }}>{new Date(item.timestamp || item.time || Date.now()).toLocaleTimeString()}</span>
+                      <span style={{ fontWeight: 'bold', color: item.type === 'fire' ? '#ff4500' : '#ccc' }}>
+                        {(item.type || 'ALERT').toUpperCase()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#bbb', marginTop: '2px' }}>
+                      Detections: {item.count || item.detections?.length || 0}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Quick Stats Panel */}
-          <div className="glass-card p-6 flex flex-col gap-3 border border-white/5">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Node Status</h3>
-            <div className="flex justify-between text-xs py-1 border-b border-white/5">
-              <span className="text-[#888]">Connection</span>
-              <span className="text-green-500 font-semibold">WebSocket Active</span>
-            </div>
-            <div className="flex justify-between text-xs py-1 border-b border-white/5">
-              <span className="text-[#888]">Local Pipeline</span>
-              <span className="text-white font-semibold">{mode === 'webcam' && isRunning ? 'Running' : 'Standby'}</span>
-            </div>
-            <div className="flex justify-between text-xs py-1 border-b border-white/5">
-              <span className="text-[#888]">GPS Bind</span>
-              <span className="text-white font-semibold">
-                {property?.lat ? `${Number(property.lat).toFixed(4)}, ${Number(property.lng).toFixed(4)}` : 'Unassigned'}
-              </span>
-            </div>
-          </div>
         </div>
+
       </div>
 
-      {/* Alerts History Table */}
-      <section className="glass-card p-6 border border-white/5 mt-4">
-        <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-          <Clock className="text-amber-500 w-5 h-5" />
-          Alert History Log
-        </h3>
-        
-        {alertsHistory.length === 0 ? (
-          <div className="text-center py-8 text-xs text-[#666]">
-            No historical alert logs recorded.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-white/15 text-[#888]">
-                  <th className="py-2.5 px-2">Timestamp</th>
-                  <th className="py-2.5 px-2">Type</th>
-                  <th className="py-2.5 px-2">Location</th>
-                  <th className="py-2.5 px-2">Confidence Range</th>
-                  <th className="py-2.5 px-2">Trigger Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {alertsHistory.map((item, idx) => (
-                  <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-all text-[#e0e0e0]">
-                    <td className="py-3 px-2 font-mono">{item.time || 'N/A'}</td>
-                    <td className="py-3 px-2 font-bold uppercase text-red-400">
-                      {item.type || 'Alert'}
-                    </td>
-                    <td className="py-3 px-2">{item.title || property?.name || 'Monitoring Node'}</td>
-                    <td className="py-3 px-2 font-mono text-[#888]">{item.message || 'Detection Confirmed'}</td>
-                    <td className="py-3 px-2 text-amber-500 font-semibold">YOLOv8 Core</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </div>
   );
 }
