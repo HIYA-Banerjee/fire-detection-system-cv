@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../App';
+import '../styles/Dashboard.css';
 import { 
   getProperties, 
   getStatus, 
@@ -99,36 +100,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="page-wrapper min-h-screen text-[#e0e0e0] flex flex-col gap-6">
-      {/* Header */}
-      <header className="glass-card p-6 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="text-3xl">🔥</div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Agniv Dashboard</h1>
-            <p className="text-sm text-[#888]">Logged in as: <span className="text-white font-medium">{user?.email}</span></p>
-          </div>
-        </div>
-
-        {/* Navigation Links & Logout */}
-        <div className="flex flex-wrap items-center gap-3">
-          <Link to="/dashboard" className="btn-ghost py-2 px-4 text-sm font-semibold flex items-center gap-2 border-fire-500/20 text-fire-500">
-            <Server size={16} /> Dashboard
-          </Link>
-          <Link to="/fire-station" className="btn-ghost py-2 px-4 text-sm font-semibold flex items-center gap-2">
-            <ShieldAlert size={16} /> Fire Station
-          </Link>
-          <Link to="/verify" className="btn-ghost py-2 px-4 text-sm font-semibold flex items-center gap-2">
-            <ShieldCheck size={16} /> Face Verify
-          </Link>
-          <button 
-            onClick={handleLogoutClick} 
-            className="btn-ghost py-2 px-4 text-sm font-semibold flex items-center gap-2 hover:bg-red-500/10 hover:border-red-500/30"
-          >
-            <LogOut size={16} /> Logout
-          </button>
-        </div>
-      </header>
+    <div className="dashboard page-wrapper min-h-screen text-[#e0e0e0] flex flex-col gap-6">
 
       {/* Alert Banner */}
       {status.alert_active && (

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createProperty } from '../services/api';
 import { Building, MapPin, Navigation, Lock, ArrowLeft } from 'lucide-react';
+import '../styles/AddProperty.css';
 
 export default function AddProperty() {
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ export default function AddProperty() {
   };
 
   return (
-    <div className="page-wrapper min-h-screen text-[#e0e0e0] flex items-center justify-center py-12 px-4">
+    <div className="add-property-container page-wrapper min-h-screen text-[#e0e0e0] flex items-center justify-center py-12 px-4">
       <div className="auth-card glass-card w-full max-w-lg p-8 relative border border-white/10 rounded-xl">
         
         {/* Back Button */}

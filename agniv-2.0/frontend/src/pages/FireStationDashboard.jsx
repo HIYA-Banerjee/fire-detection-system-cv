@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAlerts, clearAlerts } from '../services/api';
+import '../styles/FireStationDashboard.css';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -89,7 +90,7 @@ export default function FireStationDashboard() {
   };
 
   return (
-    <div className="page-wrapper min-h-screen text-[#e0e0e0] flex flex-col gap-6">
+    <div className="fire-station-page page-wrapper min-h-screen text-[#e0e0e0] flex flex-col gap-6">
       
       {/* Header */}
       <header className="glass-card p-6 flex flex-col sm:flex-row justify-between items-center gap-4">

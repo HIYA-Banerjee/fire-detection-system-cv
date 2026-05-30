@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera, Mic, CheckCircle, ShieldAlert, AlertCircle } from 'lucide-react';
+import '../styles/FaceVerification.css';
 
 export default function FaceVerification() {
   const navigate = useNavigate();
@@ -179,7 +180,7 @@ export default function FaceVerification() {
   }, []);
 
   return (
-    <div className="page-wrapper min-h-screen text-[#e0e0e0] flex items-center justify-center p-4">
+    <div className="verify-container page-wrapper min-h-screen text-[#e0e0e0] flex items-center justify-center p-4">
       <div className="auth-card glass-card w-full max-w-xl p-8 border border-white/10 rounded-xl relative">
         
         {/* Back Button */}

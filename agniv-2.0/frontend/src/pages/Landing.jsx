@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Zap, Target, MapPin, ShieldAlert, Camera, Lock } from 'lucide-react';
+import '../styles/Landing.css';
 
 export default function Landing() {
   const navigate = useNavigate();
