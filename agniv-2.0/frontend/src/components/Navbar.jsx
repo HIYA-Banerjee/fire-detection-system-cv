@@ -1,39 +1,25 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
-import { 
-  Flame, 
-  LayoutDashboard, 
-  Camera, 
-  Shield, 
-  MapPin, 
-  LogOut, 
-  Plus 
-} from 'lucide-react';
+import { Flame } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [hoveredIdx, setHoveredIdx] = useState(null);
 
-  const handleLogoutClick = async () => {
+  const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
   const navLinks = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/fire-station', label: 'Fire Station', icon: Shield },
-    { path: '/verify', label: 'Face Verify', icon: Camera },
-    { path: '/add-property', label: 'Add Property', icon: Plus },
+    { path: '/dashboard', label: 'Dashboard' },
+    { path: '/fire-station', label: 'Fire Station' },
+    { path: '/verify', label: 'Face Verify' },
+    { path: '/add-property', label: 'Add Property' },
   ];
-
-  // Helper to truncate email
-  const truncateEmail = (email) => {
-    if (!email) return '';
-    return email.length > 20 ? email.substring(0, 17) + '...' : email;
-  };
 
   return (
     <nav 
@@ -46,128 +32,89 @@ export default function Navbar() {
         height: '64px',
         display: 'flex',
         alignItems: 'center',
-        padding: '0 24px',
-        background: 'rgba(10,10,18,0.85)',
-        backdropFilter: 'blur(12px)',
+        justifyContent: 'space-between',
+        padding: '0 40px',
+        background: 'rgba(10,10,18,0.92)',
+        backdropFilter: 'blur(16px)',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
-        justifyContent: 'space-between'
+        gap: '0'
       }}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo / Left side */}
-          <div 
-            className="flex items-center gap-2 cursor-pointer"
-            onClick={() => navigate('/dashboard')}
-          >
-            <Flame className="text-[#ff4500] w-6 h-6 animate-pulse" />
-            <span className="font-bold text-lg tracking-wider bg-gradient-to-r from-fire-500 to-[#ff8c00] bg-clip-text text-transparent font-sans">
-              Agniv 2.0
-            </span>
-          </div>
-
-          {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center gap-6">
-            {navLinks.map((link) => {
-              const Icon = link.icon;
-              const isActive = location.pathname === link.path;
-              return (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${
-                    isActive 
-                      ? 'text-fire-500 bg-white/5 border border-fire-500/20' 
-                      : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {link.label}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Right side Actions (User info + Logout) */}
-          <div className="hidden md:flex items-center gap-4">
-            <div className="text-right text-xs">
-              <span className="text-gray-400 block font-light">Logged in as</span>
-              <span className="text-white font-medium block truncate max-w-[150px]" title={user?.email}>
-                {truncateEmail(user?.email)}
-              </span>
-            </div>
-            <button
-              onClick={handleLogoutClick}
-              className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-400 hover:text-red-300 border-red-500/10 hover:border-red-500/30"
-              style={{ borderRadius: '6px' }}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Logout
-            </button>
-          </div>
-
-          {/* Mobile Menu Button (Hamburger) */}
-          <div className="flex md:hidden">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              type="button"
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-white/5 focus:outline-none"
-              aria-controls="mobile-menu"
-              aria-expanded={isOpen}
-            >
-              <span className="sr-only">Open main menu</span>
-              {isOpen ? (
-                <svg className="block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
+      {/* SECTION 1 — LEFT: Logo only */}
+      <div 
+        onClick={() => navigate('/dashboard')}
+        style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '160px', cursor: 'pointer' }}
+      >
+        <Flame style={{ color: '#ff4500', width: '24px', height: '24px' }} />
+        <span style={{ fontSize: '20px', fontWeight: 700, color: '#ff4500', fontFamily: 'sans-serif' }}>
+          Agniv 2.0
+        </span>
       </div>
 
-      {/* Mobile Navigation Dropdown Menu */}
-      <div className={`md:hidden ${isOpen ? 'block' : 'hidden'}`} id="mobile-menu">
-        <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-[#0a0a12]/95 border-b border-white/10">
-          {navLinks.map((link) => {
-            const Icon = link.icon;
-            const isActive = location.pathname === link.path;
-            return (
-              <Link
-                key={link.path}
-                to={link.path}
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-base font-semibold ${
-                  isActive 
-                    ? 'text-fire-500 bg-white/5' 
-                    : 'text-gray-300 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {link.label}
-              </Link>
-            );
-          })}
-          
-          {/* User Email & Logout in mobile view */}
-          <div className="border-t border-white/5 pt-4 mt-2 px-3 pb-2 flex flex-col gap-2">
-            <div className="text-xs text-gray-400">
-              Logged in as: <span className="text-white font-medium block truncate mt-0.5">{user?.email}</span>
-            </div>
+      {/* SECTION 2 — CENTER: Nav links */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {navLinks.map((link, idx) => {
+          const isActive = location.pathname === link.path;
+          return (
             <button
-              onClick={() => { setIsOpen(false); handleLogoutClick(); }}
-              className="btn-ghost w-full flex items-center justify-center gap-2 py-2 text-sm font-semibold text-red-400 border-red-500/10 hover:border-red-500/30"
-              style={{ borderRadius: '6px' }}
+              key={link.path}
+              onClick={() => navigate(link.path)}
+              onMouseEnter={() => setHoveredIdx(idx)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                ...(isActive ? {
+                  background: 'rgba(255, 69, 0, 0.15)',
+                  color: '#ff4500',
+                  border: '1px solid rgba(255, 69, 0, 0.3)'
+                } : {
+                  background: hoveredIdx === idx ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                  color: hoveredIdx === idx ? '#fff' : '#aaa',
+                  border: '1px solid transparent'
+                })
+              }}
             >
-              <LogOut className="w-4 h-4" />
-              Logout
+              {link.label}
             </button>
+          );
+        })}
+      </div>
+
+      {/* SECTION 3 — RIGHT: User info + logout */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '200px', justifyContent: 'flex-end' }}>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '11px', color: '#888' }}>Logged in as</div>
+          <div style={{ fontSize: '13px', color: '#ddd', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={user?.email}>
+            {user?.email}
           </div>
         </div>
+        <button 
+          onClick={handleLogout} 
+          style={{
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px',
+            background: 'rgba(239, 68, 68, 0.15)', 
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            color: '#f87171', 
+            padding: '8px 14px', 
+            borderRadius: '8px',
+            fontSize: '13px', 
+            fontWeight: '600', 
+            cursor: 'pointer', 
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          → Logout
+        </button>
       </div>
     </nav>
   );
