@@ -322,8 +322,7 @@ Built by **TechnoBlade** for the Google Developers Solution Challenge 2026.
 
 | Role | Contributor |
 |------|-------------|
-| Full-stack Dev | Joshua Haniel |
-| Domain Expert | Hiya |
+| Full-stack Dev | Hiya Bandyopadhyay |
 
 ---
 
