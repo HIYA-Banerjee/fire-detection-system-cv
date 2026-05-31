@@ -316,9 +316,7 @@ Socket.IO emits "alert" to all connected clients if fire/smoke found
 
 ---
 
-## 🤝 Team
-
-Built by **TechnoBlade** for the Google Developers Solution Challenge 2026.
+## 🤝Author
 
 | Role | Contributor |
 |------|-------------|
